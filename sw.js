@@ -6,7 +6,7 @@
      those need live data and can't be reliably cached.
    Bump CACHE_VERSION whenever you ship new files to force clients to refresh. */
 
-const CACHE_VERSION = 'quantview-v2';
+const CACHE_VERSION = 'quantview-v3';
 
 // App shell — small, always-needed files.
 const PRECACHE_URLS = [

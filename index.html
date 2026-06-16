@@ -130,7 +130,7 @@
 
       .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; width:100%;}
       .search-group{
-        display:flex; align-items:center; gap:10px; padding:8px 12px; min-width:360px; position:relative;
+        display:flex; align-items:center; gap:10px; padding:8px 12px; min-width:0; flex:1 1 320px; max-width:420px; position:relative;
         transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
       }
       .search-group:focus-within{
@@ -140,7 +140,7 @@
         transform: translateY(-1px);
       }
       input[type="text"]{
-        background:transparent; border:none; outline:none; color:inherit; width:280px; font-size:14px;
+        background:transparent; border:none; outline:none; color:inherit; flex:1; min-width:0; width:auto; font-size:14px;
       }
       input::placeholder{color:var(--muted)}
 
@@ -270,6 +270,46 @@
       #homeComboList { list-style: none; margin: 0; padding: 6px; }
 
       @media (max-width:900px){ .wrap{grid-template-columns:1fr} .span-2{grid-column:span 1} header{top:8px} }
+
+      /* ---------- Mobile ---------- */
+      html, body { overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }            /* belt-and-braces against sideways scroll */
+      @media (max-width:600px){
+        :root{ --gap:16px; }
+        body{
+          padding-left: env(safe-area-inset-left);
+          padding-right: env(safe-area-inset-right);
+        }
+        header{
+          top:6px; gap:8px; padding:10px 12px; flex-wrap:wrap;
+          width:min(1200px, 100% - 12px);
+        }
+        #site-logo span{ font-size:19px; }
+        .controls{ gap:8px; }
+        /* Search becomes its own full-width row at the top of the controls cluster */
+        .search-group{ order:-1; flex:1 1 100%; max-width:none; }
+        /* 16px stops iOS from zooming in when the field gains focus */
+        input[type="text"]{ font-size:16px; }
+        .btn{ padding:11px 13px; font-size:13px; }    /* a touch taller for thumbs */
+        .toggle{ padding:8px 10px; }
+        .pill{ font-size:11px; padding:6px 8px; }
+
+        .wrap{ width:min(1200px, 100% - 16px); margin:12px 0 24px; }
+
+        /* Hero (inline font-size needs the override) */
+        #homeWrap h1{ font-size:23px !important; }
+        #homeWrap .home-go{ width:100%; justify-content:center; }
+        .home-card{ padding:16px; }
+
+        /* Compare-tab search row goes full width and fluid */
+        #compareWrap .glass.dense{ flex:1 1 100%; }
+        #cmpInput{ width:auto; flex:1 1 auto; min-width:0; font-size:16px; }
+
+        /* Shorter widgets so each fits a phone screen without endless scrolling */
+        #advanced-chart{ height:60vh; min-height:320px; }
+        #company-profile{ height:320px; }
+        #fundamental-data{ height:420px; }
+        #technical-analysis,#top-stories,#market-overview{ height:360px; }
+      }
     </style>
   </head>
   <body>
