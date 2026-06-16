@@ -1,0 +1,1198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+    <title>QuantView</title>
+
+    <!-- PWA -->
+    <meta name="description" content="QuantView — Colombo Stock Exchange charts and side-by-side symbol comparison."/>
+    <link rel="manifest" href="./manifest.webmanifest"/>
+    <meta name="theme-color" content="#2962ff"/>
+    <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml"/>
+    <link rel="apple-touch-icon" href="./icons/icon-192.png"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="apple-mobile-web-app-title" content="QuantView"/>
+
+    <style>
+      :root{
+        --gap:28px;
+        --accent:#2962ff;
+        --fg:#0b0e11;
+        --muted:rgba(0,0,0,.65);
+        --bokeh1:#c7e3ff;
+        --bokeh2:#ffe7f1;
+        --bokeh3:#e5ffe7;
+        font-family:-apple-system,BlinkMacSystemFont,'Trebuchet MS',Roboto,Ubuntu,sans-serif;
+        color:var(--fg);
+
+        /* Motion tokens */
+        --ease-out: cubic-bezier(.22,1,.36,1);
+        --ease-in:  cubic-bezier(.4,0,.2,1);
+        --dur-fast: 120ms;
+        --dur:      220ms;
+        --dur-slow: 480ms;
+      }
+      [data-theme="dark"]{
+        --fg:#f5f7fa;
+        --muted:rgba(255,255,255,.7);
+      }
+      *{box-sizing:border-box}
+
+      @media (prefers-reduced-motion: reduce){
+        * { animation: none !important; transition: none !important; }
+      }
+
+      body{
+        margin:0; min-height:100vh; display:flex; flex-direction:column; align-items:center;
+        background:
+          radial-gradient(800px 800px at 10% -10%, var(--bokeh1) 0%, rgba(0,0,0,0) 60%),
+          radial-gradient(900px 700px at 110% 0%, var(--bokeh2) 0%, rgba(0,0,0,0) 55%),
+          radial-gradient(700px 900px at 50% 120%, var(--bokeh3) 0%, rgba(0,0,0,0) 55%),
+          linear-gradient(180deg, #eef3ff 0%, #f7f9ff 30%, #ffffff 100%);
+      }
+      [data-theme="dark"] body{
+        background:
+          radial-gradient(800px 800px at 10% -10%, rgba(40,80,255,.24) 0%, rgba(0,0,0,0) 60%),
+          radial-gradient(900px 700px at 110% 0%, rgba(255,90,160,.18) 0%, rgba(0,0,0,0) 55%),
+          radial-gradient(700px 900px at 50% 120%, rgba(90,255,140,.12) 0%, rgba(0,0,0,0) 55%),
+          linear-gradient(180deg, #0b0e11 0%, #0e1217 100%);
+      }
+
+      body:not(.ready) header,
+      body:not(.ready) #ticker-tape,
+      body:not(.ready) .wrap,
+      body:not(.ready) footer{
+        opacity: 0;
+        transform: translateY(8px) scale(.995);
+        filter: saturate(.9);
+      }
+      body.ready header,
+      body.ready #ticker-tape,
+      body.ready .wrap,
+      body.ready footer{
+        transition:
+          opacity var(--dur-slow) var(--ease-out),
+          transform var(--dur-slow) var(--ease-out),
+          filter var(--dur) var(--ease-out);
+      }
+
+      .glass{
+        background: rgba(255,255,255,.18);
+        border: 1px solid rgba(255,255,255,.35);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        box-shadow: 0 8px 24px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.25);
+        border-radius: 16px;
+        transition:
+          box-shadow var(--dur) var(--ease-out),
+          transform var(--dur) var(--ease-out),
+          background var(--dur) var(--ease-out),
+          border-color var(--dur) var(--ease-out);
+      }
+      [data-theme="dark"] .glass{
+        background: rgba(13,17,23,.35);
+        border-color: rgba(255,255,255,.08);
+        box-shadow: 0 10px 28px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+      }
+      .glass:hover{
+        transform: translateY(-1px);
+        box-shadow: 0 12px 28px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.35);
+      }
+      [data-theme="dark"] .glass:hover{
+        box-shadow: 0 14px 32px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+      }
+      .glass.dense{
+        background: rgba(255,255,255,.90);
+        border-color: rgba(0,0,0,.08);
+        backdrop-filter: blur(18px) saturate(160%);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
+        box-shadow: 0 12px 28px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.5);
+      }
+      [data-theme="dark"] .glass.dense{
+        background: rgba(13,17,23,.85);
+        border-color: rgba(255,255,255,.12);
+        box-shadow: 0 14px 32px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      }
+
+      header{
+        position:sticky; top:12px; z-index:10000;
+        display:flex; align-items:center; justify-content:space-between;
+        gap:16px; width:min(1200px, 100% - 24px); padding:12px 16px;
+      }
+      #site-logo{display:flex; align-items:center; gap:10px; text-decoration:none}
+      #site-logo span{
+        font-weight:800; letter-spacing:.2px; font-size:22px; line-height:1;
+        background: linear-gradient(90deg, #00bce5 0%, var(--accent) 100%);
+        -webkit-text-fill-color:transparent; -webkit-background-clip:text; background-clip:text;
+      }
+
+      .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; width:100%;}
+      .search-group{
+        display:flex; align-items:center; gap:10px; padding:8px 12px; min-width:360px; position:relative;
+        transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+      }
+      .search-group:focus-within{
+        box-shadow:
+          0 0 0 8px rgba(41,98,255,.08),
+          0 12px 28px rgba(0,0,0,.10);
+        transform: translateY(-1px);
+      }
+      input[type="text"]{
+        background:transparent; border:none; outline:none; color:inherit; width:280px; font-size:14px;
+      }
+      input::placeholder{color:var(--muted)}
+
+      .btn{
+        line-height:1; padding:10px 14px; border-radius:12px; cursor:pointer; font-size:14px;
+        border:1px solid rgba(255,255,255,.35);
+        background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.18));
+        box-shadow: 0 4px 16px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.45);
+        transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+        will-change: transform;
+      }
+      .btn:active{
+        transform: translateY(1px) scale(.995);
+        transition-timing-function: var(--ease-in);
+      }
+      .btn.primary{
+        border:0;
+        background: linear-gradient(135deg, rgba(41,98,255,.95), rgba(0,188,229,.95));
+        color:#fff;
+        box-shadow: 0 8px 20px rgba(41,98,255,.35);
+      }
+      [data-theme="dark"] .btn{
+        border-color: rgba(255,255,255,.08);
+        background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+        box-shadow: 0 4px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+      }
+
+      .toggle{display:inline-flex; align-items:center; gap:8px; padding:8px 12px}
+      .toggle input{appearance:none; width:42px; height:24px; border-radius:999px; background:rgba(255,255,255,.45); position:relative; outline:0; cursor:pointer; border:1px solid rgba(255,255,255,.35); transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);}
+      .toggle input::after{content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out)}
+      .toggle input:checked{background:linear-gradient(90deg, #00bce5, var(--accent))}
+      .toggle input:checked::after{transform:translateX(18px); box-shadow: 0 4px 10px rgba(41,98,255,.35);}
+
+      .pill{
+        display:inline-flex; align-items:center; gap:8px; padding:8px 12px; font-size:12px; color:var(--muted);
+      }
+      #marketStatus .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#9ca3af}
+      #marketStatus.open{border-color:#16a34a}
+      #marketStatus.open .dot{background:#16a34a}
+      #marketStatus.preopen{border-color:#f59e0b}
+      #marketStatus.preopen .dot{background:#f59e0b}
+      #marketStatus.closed{border-color:#9ca3af}
+      #marketStatus.closed .dot{background:#9ca3af}
+
+      .wrap{width:min(1200px, 100% - 24px); display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); margin:16px 0 28px}
+      .span-2{grid-column:span 2}
+
+      #ticker-tape .tradingview-widget-container__widget{border-radius:12px; overflow:hidden}
+      #advanced-chart{height:520px}
+      #company-profile{height:380px}
+      #fundamental-data{height:480px}
+      #technical-analysis,#top-stories,#market-overview{height:420px}
+
+      #watchlist{padding:14px}
+      #watchlist h3{margin:0 0 10px 2px}
+      #watchlist ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px}
+      #watchlist li{display:inline-flex;align-items:center;gap:10px;padding:8px 12px;border-radius:999px}
+      #watchlist button.remove{border:none;background:transparent;cursor:pointer;font-weight:700;font-size:16px;line-height:1}
+      a.tag{text-decoration:none;color:inherit}
+
+      #ticker-tape, .wrap, .tradingview-widget-container{ position: relative; z-index: 1; }
+      body.searching #ticker-tape{ opacity: .2; transition: opacity var(--dur-fast) var(--ease-out); pointer-events:none; }
+
+      #comboPanel {
+        position: absolute; top: calc(100% + 6px); left: 0; width: 100%;
+        display: none; max-height: 480px; overflow: auto; z-index: 10001;
+        opacity: 0; transform: translateY(6px) scale(.99);
+        transition:
+          opacity var(--dur) var(--ease-out),
+          transform var(--dur) var(--ease-out),
+          box-shadow var(--dur) var(--ease-out);
+        will-change: transform, opacity;
+      }
+      #comboPanel.open { display: block; opacity: 1; transform: translateY(0) scale(1); }
+      #comboList { list-style: none; margin: 0; padding: 6px; }
+      .combo-item {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+        transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), outline-color var(--dur-fast) var(--ease-out);
+      }
+      .combo-item:hover, .combo-item.active { outline: 2px solid var(--accent); background: rgba(41,98,255,.10); }
+      .combo-item:hover{ transform: translateY(-1px); }
+      .combo-item.active{ transform: translateY(-1px) scale(1.01); }
+      [data-theme="dark"] .combo-item:hover,
+      [data-theme="dark"] .combo-item.active { background: rgba(41,98,255,.16); }
+      .combo-left { display: flex; align-items: baseline; gap: 10px; }
+      .combo-code { font-weight: 800; letter-spacing: .2px; }
+      .combo-name { color: var(--muted); font-size: 12px; }
+      .combo-pill {
+        font-size: 11px; padding: 4px 8px; border-radius: 999px;
+        border: 1px solid rgba(0,0,0,.08);
+      }
+      [data-theme="dark"] .combo-pill { border-color: rgba(255,255,255,.12); }
+      .combo-empty { padding: 10px 12px; color: var(--muted); }
+      .combo-mark { background: transparent; font-weight: 700; text-decoration: underline; }
+
+      /* Compare-tab autocomplete reuses the same look as the header combo */
+      #cmpComboPanel {
+        position: absolute; top: calc(100% + 6px); left: 0; width: max(220px, 100%);
+        display: none; max-height: 360px; overflow: auto; z-index: 10001;
+      }
+      #cmpComboPanel.open { display: block; }
+      #cmpComboList { list-style: none; margin: 0; padding: 6px; }
+      .cmp-chip {
+        display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+        border-radius: 999px; font-size: 13px; font-weight: 700;
+        border: 1px solid rgba(0,0,0,.08); background: rgba(41,98,255,.10);
+      }
+      [data-theme="dark"] .cmp-chip { border-color: rgba(255,255,255,.12); background: rgba(41,98,255,.18); }
+      .cmp-chip button {
+        all: unset; cursor: pointer; line-height: 1; font-size: 15px; color: var(--muted);
+        padding: 0 2px; border-radius: 6px;
+      }
+      .cmp-chip button:hover { color: var(--fg); }
+
+      /* Home tab */
+      .home-cards { display:grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap); }
+      @media (max-width:900px){ .home-cards{ grid-template-columns: 1fr } }
+      .home-card { padding: 18px 18px; cursor: pointer; }
+      .home-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .home-card h3 { font-size: 17px; }
+      #homeComboPanel {
+        position: absolute; top: calc(100% + 6px); left: 0; width: 100%;
+        display: none; max-height: 320px; overflow: auto; z-index: 10001;
+      }
+      #homeComboPanel.open { display: block; }
+      #homeComboList { list-style: none; margin: 0; padding: 6px; }
+
+      @media (max-width:900px){ .wrap{grid-template-columns:1fr} .span-2{grid-column:span 1} header{top:8px} }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="glass">
+      <a id="site-logo" href="#" title="Home"><span>QuantView</span></a>
+      <div class="controls">
+        <span id="sessionClock" class="pill glass" title="Asia/Colombo time">--:--</span>
+        <span id="marketStatus" class="pill glass" title="Colombo Stock Exchange status"><span class="dot"></span> Checking…</span>
+
+        <button id="homeTabBtn" class="btn glass" title="Home">Home</button>
+        <!-- Search group -->
+        <form id="qForm" class="search-group glass" autocomplete="off"
+              onsubmit="event.preventDefault(); document.getElementById('goBtn').click();">
+          <input id="symbolInput" type="text" placeholder="Search CSE code or company…" aria-label="Search symbol"
+                 autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+                 inputmode="search" enterkeyhint="search"/>
+          <button id="goBtn" class="btn primary" type="button">Load</button>
+          <datalist id="cse-list"></datalist>
+          <div id="comboPanel" class="glass dense" role="listbox" aria-label="Symbols">
+            <ul id="comboList"></ul>
+          </div>
+        </form>
+
+        <button id="addWatchBtn" class="btn glass" title="Add current symbol to watchlist">+ Watchlist</button>
+        <button id="shareBtn" class="btn glass" title="Copy a link to this view">Share</button>
+        <button id="compareTabBtn" class="btn glass" title="Compare symbols (overlay)">Compare</button>
+        <label class="toggle glass" title="Toggle dark mode">
+          <span>Dark</span><input id="themeToggle" type="checkbox"/>
+        </label>
+      </div>
+    </header>
+
+    <!-- Ticker Tape container -->
+    <nav id="ticker-tape" class="glass span-2" style="width:min(1200px, 100% - 24px); margin-top:12px; padding:6px 8px;">
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+      </div>
+    </nav>
+
+    <!-- ===== HOME TAB ===== -->
+    <main id="homeWrap" class="wrap">
+      <section class="glass span-2" style="padding:28px 24px;">
+        <div style="display:flex; flex-direction:column; gap:14px; max-width:680px;">
+          <h1 style="margin:0; font-size:30px; line-height:1.15;">Sri Lanka's market, at a glance.</h1>
+          <p style="margin:0; color:var(--muted); font-size:15px;">
+            Live CSE charts and side-by-side symbol comparison — all in one place.
+          </p>
+          <div class="glass dense" style="display:flex; align-items:center; gap:10px; padding:8px 12px; position:relative; max-width:460px;">
+            <input id="homeSearch" type="text" placeholder="Search a CSE code or company…" autocomplete="off"
+                   style="flex:1; min-width:0;"/>
+            <button id="homeGoBtn" class="btn primary" type="button">Open</button>
+            <div id="homeComboPanel" class="glass dense" role="listbox" aria-label="Symbols">
+              <ul id="homeComboList"></ul>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:2px;">
+            <button class="btn glass home-go" data-tab="market">Explore markets →</button>
+            <button class="btn glass home-go" data-tab="compare">Compare symbols →</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="span-2 home-cards">
+        <section class="glass home-card home-go" data-tab="market" role="button" tabindex="0">
+          <h3 style="margin:0 0 6px;">📈 Markets</h3>
+          <p style="margin:0; color:var(--muted); font-size:13px;">Interactive charts, company profiles, financials and technicals for any listed symbol.</p>
+        </section>
+        <section class="glass home-card home-go" data-tab="compare" role="button" tabindex="0">
+          <h3 style="margin:0 0 6px;">⚖️ Compare</h3>
+          <p style="margin:0; color:var(--muted); font-size:13px;">Overlay up to six symbols, rebased to percent so movements line up directly.</p>
+        </section>
+      </div>
+
+      <section class="glass span-2">
+        <h3 style="margin:12px 12px 0;">Market Snapshot</h3>
+        <div id="home-overview" style="margin:8px 6px 10px;">
+          <div class="tradingview-widget-container"><div class="tradingview-widget-container__widget" style="height:380px"></div></div>
+        </div>
+      </section>
+
+      <section class="glass span-2" aria-label="Watchlist">
+        <h3 style="margin:12px 12px 8px;">Your Watchlist</h3>
+        <div id="homeWatchlist" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 12px 12px;"></div>
+        <p id="homeWatchlistEmpty" style="margin:0 12px 14px; color:var(--muted);">No symbols yet. Open one in Markets and tap “+ Watchlist”.</p>
+      </section>
+    </main>
+
+    <!-- ===== MARKET TAB ===== -->
+    <main id="marketWrap" class="wrap" style="display:none">
+      <section id="symbol-info" class="glass span-2">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+        </div>
+      </section>
+
+      <section id="advanced-chart" class="glass span-2">
+        <div class="tradingview-widget-container" style="height:100%;width:100%">
+          <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+        </div>
+      </section>
+
+      <section id="company-profile" class="glass">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <div class="placeholder" style="display:none;padding:8px;color:var(--muted);">No company profile for non-CSE symbols.</div>
+        </div>
+      </section>
+
+      <section id="fundamental-data" class="glass">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <div class="placeholder" style="display:none;padding:8px;color:var(--muted);">No financials for non-CSE symbols.</div>
+        </div>
+      </section>
+
+      <section id="technical-analysis" class="glass">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+        </div>
+      </section>
+
+      <!-- Market Quotes board -->
+      <section id="top-stories" class="glass">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+        </div>
+      </section>
+
+      <section id="watchlist" class="glass span-2" aria-label="Watchlist">
+        <h3>Your Watchlist</h3>
+        <ul id="watchlistItems"></ul>
+        <p id="watchlistEmpty" style="margin:4px 2px;color:var(--muted);">No symbols yet. Add the current symbol with “+ Watchlist”.</p>
+      </section>
+
+      <!-- Market Overview card -->
+      <section id="market-overview" class="glass span-2">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget" style="height:420px"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== COMPARE TAB ===== -->
+    <main id="compareWrap" class="wrap" style="display:none">
+      <section class="glass span-2">
+        <h3 style="margin:12px 12px 0 12px;">Compare Symbols</h3>
+        <p style="margin:6px 12px 0; color:var(--muted); font-size:12.5px;">
+          Overlay up to 6 symbols, rebased to percent change so different price levels are directly comparable.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 12px;">
+          <div class="glass dense" style="display:flex; align-items:center; gap:8px; padding:6px 10px; position:relative;">
+            <input id="cmpInput" type="text" placeholder="Add symbol (e.g. JKH)" style="width:200px;" autocomplete="off"/>
+            <button id="cmpAddBtn" class="btn primary" type="button">Add</button>
+            <div id="cmpComboPanel" class="glass dense" role="listbox" aria-label="Symbols">
+              <ul id="cmpComboList"></ul>
+            </div>
+          </div>
+          <button id="cmpClearBtn" class="btn glass" type="button">Clear all</button>
+        </div>
+        <div id="cmpChips" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 12px 6px;"></div>
+        <div id="cmp-overview" style="margin:0 6px 10px;">
+          <div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div></div>
+        </div>
+        <p id="cmpEmpty" style="margin:4px 14px 14px; color:var(--muted);">Add at least one symbol to build the overlay.</p>
+      </section>
+    </main>
+
+    <footer class="glass" style="width:min(1200px, 100% - 24px); padding:10px 14px; margin-bottom:24px; color:var(--muted);">
+      <p style="margin:.25rem 0">MW Version 1.1</p>
+    </footer>
+
+    <!-- External symbol directory (code + company name) -->
+    <script src="./cse-symbols.js"></script>
+
+    <script>
+      // Apple-y entrance: mark ready on next frame
+      window.addEventListener('DOMContentLoaded', () => {
+        requestAnimationFrame(() => document.body.classList.add('ready'));
+      });
+
+      // Register the service worker (PWA: installable + offline app shell).
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registration failed:', err));
+        });
+      }
+
+      // ====== Constants & helpers ======
+      const TZ = 'Asia/Colombo';
+      const CSE_PREFIX = 'CSELK:';
+      const $ = s => document.querySelector(s);
+      const $$ = s => Array.from(document.querySelectorAll(s));
+      const getParam = p => new URLSearchParams(location.search).get(p);
+      const isCSE = sym => typeof sym==='string' && sym.toUpperCase().startsWith(CSE_PREFIX);
+      const isAllowed = sym => { const s=(sym||'').toUpperCase(); return isCSE(s) || s==='USDLKR'; };
+      const saveLocal = (k,v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+      const loadLocal = (k,f) => { try{ const v = JSON.parse(localStorage.getItem(k)); return v ?? f; }catch(e){ return f; } };
+
+      function resolveCompanyCode(query){
+        if(!query || !window.CSE_SYMBOLS) return null;
+        const q = query.trim().toUpperCase();
+        let hit =
+          window.CSE_SYMBOLS.find(x => x.code.toUpperCase() === q) ||
+          window.CSE_SYMBOLS.find(x => x.name.toUpperCase() === q) ||
+          window.CSE_SYMBOLS.find(x => x.name.toUpperCase().startsWith(q)) ||
+          window.CSE_SYMBOLS.find(x => x.name.toUpperCase().includes(q));
+        return hit ? hit.code : null;
+      }
+
+      function normalizeInputSymbol(input){
+        if(!input) return null;
+        let s = input.trim().toUpperCase();
+        if (['ASPI','ASI','ASPX','CSE'].includes(s)) return 'CSELK:ASI';
+        if (['SL20','SPSL20','S&PSL20'].includes(s)) return 'CSELK:S&PSL20';
+        if (s === 'USDLKR') return 'USDLKR';
+        const code = resolveCompanyCode(s);
+        if (code) return CSE_PREFIX + code;
+        if (s.includes(':')) return s.startsWith(CSE_PREFIX) ? s : null;
+        return CSE_PREFIX + s;
+      }
+
+      function toTVSymbol(code){
+        if (!code) return null;
+        if (code.includes(':')) return code;
+        if (code === 'ASI') return 'CSELK:ASI';
+        if (code === 'S&PSL20') return 'CSELK:S&PSL20';
+        if (code === 'USDLKR') return 'USDLKR';
+        return 'CSELK:' + code;
+      }
+
+      function setURLSymbolParam(symbol){
+        const url = new URL(location.href);
+        url.searchParams.set('tvwidgetsymbol', symbol);
+        location.replace(url.toString());
+      }
+
+      const savedTheme = loadLocal('theme','light');
+      if(savedTheme==='dark') document.documentElement.setAttribute('data-theme','dark');
+      $('#themeToggle').checked = savedTheme==='dark';
+      const currentTheme = () => document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light';
+      function setTheme(next){
+        document.documentElement.setAttribute('data-theme', next);
+        saveLocal('theme', next);
+        mountTickerTapeAuto();   // ticker respects theme
+        mountAllWidgets(state.symbol);
+        mountMarketOverview();
+      }
+      $('#themeToggle').addEventListener('change', e => setTheme(e.target.checked?'dark':'light'));
+
+      function tickClock(){
+        const fmt = new Intl.DateTimeFormat('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:TZ});
+        $('#sessionClock').textContent = fmt.format(new Date()) + ' • ' + TZ;
+      }
+      tickClock(); setInterval(tickClock, 1000);
+
+      const CSE = { tz: 'Asia/Colombo', PREOPEN_START: 9*60+0, OPEN_START: 9*60+30, CLOSE_TIME: 14*60+30 };
+      const CSE_HOLIDAYS_2025 = new Set([]); // add YYYY-MM-DD if needed
+      function minutesInTZ(date, tz) {
+        const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz }).formatToParts(date);
+        const h = +parts.find(p => p.type === 'hour').value;
+        const m = +parts.find(p => p.type === 'minute').value;
+        return h * 60 + m;
+      }
+      const weekdayInTZ = (date, tz) => new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: tz }).format(date);
+      const ymdInTZ = (date, tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+      function computeCSEMarketStatus(now = new Date()) {
+        const tz = CSE.tz;
+        const wd = weekdayInTZ(now, tz);
+        const isWeekday = ['Mon','Tue','Wed','Thu','Fri'].includes(wd);
+        const ymd = ymdInTZ(now, tz);
+        const mins = minutesInTZ(now, tz);
+        if (!isWeekday || CSE_HOLIDAYS_2025.has(ymd)) return { state: 'closed', label: 'Closed' };
+        if (mins < CSE.PREOPEN_START) return { state: 'closed', label: 'Closed' };
+        if (mins < CSE.OPEN_START) return { state: 'preopen', label: 'Pre-open' };
+        if (mins < CSE.CLOSE_TIME) return { state: 'open', label: 'Open' };
+        return { state: 'closed', label: 'Closed' };
+      }
+      function renderMarketStatus() {
+        const el = $('#marketStatus'); if (!el) return;
+        const { state, label } = computeCSEMarketStatus();
+        el.classList.remove('open','preopen','closed'); el.classList.add(state);
+        el.innerHTML = `<span class="dot"></span> ${label}`;
+        el.title = `${label} — CSE sessions: 09:00–09:30 (Pre-open), 09:30–14:30 (Regular)`;
+      }
+      renderMarketStatus(); setInterval(renderMarketStatus, 30 * 1000);
+
+      const watchlist = loadLocal('watchlist', []);
+      function renderWatchlist(){
+        const ul = $('#watchlistItems'); ul.innerHTML='';
+        if(!watchlist.length){ $('#watchlistEmpty').style.display='block'; return; }
+        $('#watchlistEmpty').style.display='none';
+        watchlist.forEach(sym=>{
+          const li = document.createElement('li');
+          li.className = 'glass';
+          li.append(
+            Object.assign(document.createElement('a'), { href:'#', className:'tag', textContent:sym, onclick:(e)=>{e.preventDefault(); goToSymbol(sym);} }),
+            Object.assign(document.createElement('button'), { className:'remove', title:'Remove', textContent:'×', onclick:()=>{ removeFromWatchlist(sym); } })
+          );
+          ul.append(li);
+        });
+      }
+      const addToWatchlist = sym => { if(!watchlist.includes(sym)){ watchlist.push(sym); saveLocal('watchlist',watchlist); renderWatchlist(); } };
+      const removeFromWatchlist = sym => { const i=watchlist.indexOf(sym); if(i>-1){ watchlist.splice(i,1); saveLocal('watchlist',watchlist); renderWatchlist(); } };
+
+      function mountTVWidget(containerSelector, widgetFileName, config){
+        const container = document.querySelector(containerSelector+' .tradingview-widget-container');
+        if(!container) return;
+        container.querySelectorAll('script').forEach(s=>s.remove());
+        container.querySelectorAll('.tradingview-widget-container__widget').forEach(w=>w.innerHTML='');
+        const script = document.createElement('script');
+        script.type='text/javascript';
+        script.src=`https://s3.tradingview.com/external-embedding/${widgetFileName}`;
+        script.async=true;
+        script.innerHTML = JSON.stringify(config);
+        container.appendChild(script);
+      }
+      const themeForTV = () => currentTheme();
+
+      function showHideCSEOnlyCards(symbol){
+        const isCSEnow = isCSE(symbol);
+        const profile = document.querySelector('#company-profile .tradingview-widget-container__widget');
+        const fin = document.querySelector('#fundamental-data .tradingview-widget-container__widget');
+        const pPH = document.querySelector('#company-profile .placeholder');
+        const fPH = document.querySelector('#fundamental-data .placeholder');
+        if(isCSEnow){ pPH.style.display='none'; fPH.style.display='none'; }
+        else { pPH.style.display='block'; fPH.style.display='block'; profile.innerHTML=''; fin.innerHTML=''; }
+      }
+
+      // Registry of below-the-fold widgets, mounted lazily when scrolled near.
+      // Symbol changes do a full page reload (location.replace), so each load mounts once.
+      const deferredMounts = new Map(); // selector -> () => void
+
+      function mountAllWidgets(symbol){
+        // Above the fold: mount immediately.
+        mountTVWidget('#symbol-info','embed-widget-symbol-info.js',{
+          symbol, width:'100%', locale:'en', colorTheme: themeForTV(), isTransparent: true
+        });
+        mountTVWidget('#advanced-chart','embed-widget-advanced-chart.js',(
+          { autosize:true, symbol, interval:'D', timezone: TZ, theme: themeForTV(), style:'1',
+            locale:'en', allow_symbol_change:false, calendar:false, support_host:'https://www.tradingview.com' }
+        ));
+        showHideCSEOnlyCards(symbol);
+
+        // Below the fold: defer until near viewport.
+        if(isCSE(symbol)){
+          deferWidget('#company-profile', ()=> mountTVWidget('#company-profile','embed-widget-symbol-profile.js',{
+            width:'100%', height:'100%', colorTheme: themeForTV(), isTransparent:true, symbol, locale:'en'
+          }));
+          deferWidget('#fundamental-data', ()=> mountTVWidget('#fundamental-data','embed-widget-financials.js',{
+            colorTheme: themeForTV(), isTransparent:true, displayMode:'adaptive', width:'100%', height:'100%', symbol, locale:'en'
+          }));
+        }
+        deferWidget('#technical-analysis', ()=> mountTVWidget('#technical-analysis','embed-widget-technical-analysis.js',{
+          interval:'15m', width:'100%', isTransparent:true, height:'100%', symbol,
+          showIntervalTabs:true, displayMode:'single', locale:'en', colorTheme: themeForTV()
+        }));
+        deferWidget('#top-stories', ()=> mountTVWidget('#top-stories','embed-widget-market-quotes.js',{
+          colorTheme: themeForTV(), isTransparent: true, width: "100%", height: "100%", locale: "en",
+          symbolsGroups: [
+            {
+              name: "All Quotes", originalName: "CSE Indices & FX",
+              symbols: [
+                { name: symbol,              displayName: symbol },
+                { name: "CSELK:ASI",         displayName: "All Share" },
+                { name: "CSELK:S&PSL20",     displayName: "S&P SL20" },
+                { name: "USDLKR",            displayName: "USD/LKR" },
+                { name: "CSELK:JKH.N0000",   displayName: "JKH" },
+                { name: "CSELK:COMB.N0000",  displayName: "COMB" },
+                { name: "CSELK:HAYL.N0000",  displayName: "HAYL" },
+                { name: "CSELK:LOLC.N0000",  displayName: "LOLC" }
+              ]
+            }
+          ]
+        }));
+      }
+
+      // Lazy widget machinery: register a mount fn, fire it when the card nears the viewport.
+      const _lazyObserver = ('IntersectionObserver' in window)
+        ? new IntersectionObserver((entries, obs)=>{
+            entries.forEach(entry=>{
+              if(entry.isIntersecting){
+                const sel = entry.target.dataset.lazySel;
+                const fn = sel && deferredMounts.get(sel);
+                if(fn){ fn(); deferredMounts.delete(sel); }
+                obs.unobserve(entry.target);
+              }
+            });
+          }, { rootMargin: '300px 0px' })
+        : null;
+
+      function deferWidget(selector, mountFn){
+        const el = document.querySelector(selector);
+        if(!el){ return; }
+        if(!_lazyObserver){ mountFn(); return; } // no IO support: mount eagerly
+        deferredMounts.set(selector, mountFn);
+        el.dataset.lazySel = selector;
+        _lazyObserver.observe(el);
+      }
+
+      function mountMarketOverview(){
+        mountTVWidget('#market-overview','embed-widget-market-overview.js',{// tradingview
+          colorTheme: themeForTV(), dateRange:'12M', showChart:true, locale:'en', width:'100%', height:'420',
+          isTransparent:true, showSymbolLogo:true, gridLineColor:'rgba(42,46,57,0)',
+          tabs:[ { title:"CSE & FX", symbols:[
+              {s:"CSELK:ASI", d:"All Share Index"},
+              {s:"CSELK:S&PSL20", d:"S&P SL20"},
+              {s:"USDLKR", d:"USD/LKR"},
+              {s:"CSELK:JKH.N0000", d:"JKH"},
+              {s:"CSELK:COMB.N0000", d:"COMB"}
+          ]}]
+        });
+      }
+
+      function buildTickerSymbols(){
+        const base = [
+          { description: "CSE All-Share", proName: "CSELK:ASI" },
+          { description: "S&P SL20",      proName: "CSELK:S&PSL20" },
+          { description: "USD/LKR",       proName: "USDLKR" }
+        ];
+        const stocks = (window.CSE_SYMBOLS || []).map(({code, name}) => ({
+          description: name, proName: `CSELK:${code}`
+        }));
+        const front = [];
+        if (typeof state !== 'undefined' && state.symbol) {
+          front.push({ description: "Current", proName: state.symbol });
+        }
+        const seen = new Set(front.concat(base).map(s=>s.proName));
+        const dedupedStocks = stocks.filter(s => !seen.has(s.proName));
+        return [...front, ...base, ...dedupedStocks];
+      }
+
+      function mountTickerTapeSingle(list){
+        mountTVWidget('#ticker-tape','embed-widget-ticker-tape.js',{
+          symbols: list,
+          showSymbolLogo: true,
+          colorTheme: currentTheme(),
+          isTransparent: true,
+          displayMode: "adaptive",
+          locale: "en"
+        });
+      }
+
+      function mountTickerTapeChunked(list){
+        const holder = document.querySelector('#ticker-tape .tradingview-widget-container');
+        holder.innerHTML = '';
+        const CHUNK = 120;
+        for (let i=0; i<list.length; i+=CHUNK){
+          const wrap = document.createElement('div');
+          wrap.className = 'tradingview-widget-container';
+          wrap.style.marginTop = i ? '6px' : '0';
+          wrap.innerHTML = '<div class="tradingview-widget-container__widget"></div>';
+          holder.appendChild(wrap);
+
+          const cfg = {
+            symbols: list.slice(i, i+CHUNK),
+            showSymbolLogo: true,
+            colorTheme: currentTheme(),
+            isTransparent: true,
+            displayMode: "adaptive",
+            locale: "en"
+          };
+          const script = document.createElement('script');
+          script.type='text/javascript';
+          script.src='https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+          script.async = true;
+          script.innerHTML = JSON.stringify(cfg);
+          wrap.appendChild(script);
+        }
+      }
+
+      function mountTickerTapeAuto(){
+        const list = buildTickerSymbols();
+        const MAX_PER = 500;
+        if (list.length > MAX_PER) mountTickerTapeChunked(list);
+        else mountTickerTapeSingle(list);
+      }
+
+      (function populateDatalist(){
+        const dl = $('#cse-list');
+        if(!window.CSE_SYMBOLS || !Array.isArray(window.CSE_SYMBOLS)) return;
+        dl.innerHTML = '';
+        window.CSE_SYMBOLS.forEach(({code,name})=>{
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.textContent = name;
+          dl.appendChild(opt);
+        });
+      })();
+
+      function copyLink(text){ return navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(); }
+      const symbolInput = $('#symbolInput');
+      symbolInput.addEventListener('keydown', e=>{ if(e.key==='Enter') $('#goBtn').click(); });
+      symbolInput.addEventListener('focus', ()=> document.body.classList.add('searching'));
+      symbolInput.addEventListener('blur',  ()=> document.body.classList.remove('searching'));
+
+      function goToSymbol(sym){
+        const norm = normalizeInputSymbol(sym) || 'CSELK:ASI';
+        if(!isAllowed(norm)){ alert('Only CSE symbols (CSELK:…) or USDLKR are supported.'); return; }
+        saveLocal('lastSymbol', norm);
+        setURLSymbolParam(norm);
+      }
+
+      $('#goBtn').addEventListener('click', ()=> goToSymbol(symbolInput.value || state.symbol));
+      $('#addWatchBtn').addEventListener('click', ()=> addToWatchlist(state.symbol));
+      $('#shareBtn').addEventListener('click', async ()=>{
+        const link = location.origin + location.pathname + '?tvwidgetsymbol=' + encodeURIComponent(state.symbol);
+        try{ await copyLink(link); alert('Link copied: ' + link); }
+        catch(e){ prompt('Copy this link:', link); }
+      });
+
+      const panel   = $('#comboPanel');
+      const listEl  = $('#comboList');
+      const FULL_BATCH = 120;
+      let suggs = [];
+      let activeIndex = -1;
+      let fullList = [];
+      let lazyPtr = 0;
+      let showingFullList = false;
+
+      function escapeHTML(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+      function markMatch(text, q){
+        if(!q) return escapeHTML(text);
+        const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        return escapeHTML(text).replace(re, (m)=>`<span class="combo-mark">${escapeHTML(m)}</span>`);
+      }
+
+      function openPanel(){ if(!panel.classList.contains('open')) panel.classList.add('open'); }
+      function closePanel(){ panel.classList.remove('open'); activeIndex = -1; }
+      function setActive(idx){
+        const items = Array.from(listEl.querySelectorAll('.combo-item'));
+        items.forEach(x=>x.classList.remove('active'));
+        if(!items.length){ activeIndex = -1; return; }
+        activeIndex = Math.max(0, Math.min(idx, items.length - 1));
+        items[activeIndex].classList.add('active');
+        items[activeIndex].scrollIntoView({block:'nearest'});
+      }
+
+      function rankSymbols(q){
+        const Q = (q||'').trim().toUpperCase();
+        if(!Q) return [];
+        const base = (window.CSE_SYMBOLS||[]).map(x=>({code: (x.code||'').toUpperCase(), name: x.name||''}));
+        const virtuals = [{code:'ASI',name:'All Share Index'},{code:'S&PSL20',name:'S&P SL20'},{code:'USDLKR',name:'USD/LKR'}];
+        const pool = [...virtuals, ...base];
+        const scored = [];
+        for(const it of pool){
+          const codeU = it.code.toUpperCase();
+          const nameU = (it.name||'').toUpperCase();
+          let s = 0;
+          if(codeU === Q) s = 100;
+          else if(codeU.startsWith(Q)) s = 90;
+          else if(nameU.startsWith(Q)) s = 80;
+          else if(codeU.includes(Q)) s = 65;
+          else if(nameU.includes(Q)) s = 55;
+          if(s > 0) scored.push({ ...it, score: s });
+        }
+        scored.sort((a,b)=> b.score - a.score || a.code.localeCompare(b.code));
+        return scored.slice(0, 12);
+      }
+
+      function renderSuggestions(q){
+        listEl.innerHTML = '';
+        if(!suggs.length){
+          listEl.innerHTML = `<li class="combo-empty">No matches for “${escapeHTML(q)}”.</li>`;
+          openPanel(); return;
+        }
+        suggs.forEach((s, i)=>{
+          const li = document.createElement('li');
+          li.className = 'combo-item';
+          li.setAttribute('role','option');
+          li.dataset.index = i;
+          li.dataset.code  = s.code;
+          li.dataset.name  = s.name || '';
+          const left = document.createElement('div');
+          left.className = 'combo-left';
+          left.innerHTML = `
+            <span class="combo-code">${markMatch(s.code, q)}</span>
+            <span class="combo-name">${markMatch(s.name||'', q)}</span>`;
+          const right = document.createElement('div');
+          right.className = 'combo-pill';
+          right.textContent = 'CSE';
+          li.append(left, right);
+          li.addEventListener('mousedown', (e)=>{ e.preventDefault(); chooseSuggestionByElement(li); });
+          listEl.append(li);
+        });
+        setActive(0);
+        openPanel();
+      }
+
+      function baseSymbolPool(){
+        if (fullList.length) return fullList;
+        const base = (window.CSE_SYMBOLS || []).map(x => ({
+          code: (x.code || '').toUpperCase(),
+          name: x.name || ''
+        }));
+        fullList = base.sort((a,b)=> a.code.localeCompare(b.code));
+        return fullList;
+      }
+
+      function makeComboItem(obj, idx, q){
+        const li = document.createElement('li');
+        li.className = 'combo-item';
+        li.setAttribute('role','option');
+        li.dataset.index = idx;
+        li.dataset.code  = obj.code;
+        li.dataset.name  = obj.name;
+        const left = document.createElement('div');
+        left.className = 'combo-left';
+        left.innerHTML = `
+          <span class="combo-code">${markMatch(obj.code, q)}</span>
+          <span class="combo-name">${markMatch(obj.name||'', q)}</span>`;
+        const right = document.createElement('div');
+        right.className = 'combo-pill';
+        right.textContent = 'CSE';
+        li.append(left, right);
+        li.addEventListener('mousedown', (e)=>{ e.preventDefault(); chooseSuggestionByElement(li); });
+        return li;
+      }
+
+      function renderListBatch(q){
+        const source = baseSymbolPool();
+        if (lazyPtr === 0){
+          listEl.innerHTML = '';
+          const head = document.createElement('li');
+          head.className = 'combo-empty';
+          head.textContent = `Showing all ${source.length} symbols — type to filter`;
+          listEl.append(head);
+        }
+        const end = Math.min(lazyPtr + FULL_BATCH, source.length);
+        const frag = document.createDocumentFragment();
+        for (let i = lazyPtr; i < end; i++){
+          frag.append(makeComboItem(source[i], i, q));
+        }
+        listEl.append(frag);
+        if (lazyPtr === 0) setActive(0);
+        lazyPtr = end;
+        openPanel();
+      }
+
+      function showFullList(){
+        showingFullList = true;
+        lazyPtr = 0;
+        suggs = [];
+        renderListBatch('');
+      }
+
+      panel.addEventListener('scroll', ()=>{
+        if (!panel.classList.contains('open') || !showingFullList) return;
+        const nearBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 40;
+        if (nearBottom && lazyPtr < baseSymbolPool().length) renderListBatch('');
+      });
+
+      let comboDebounce;
+      symbolInput.addEventListener('input', (e)=>{
+        clearTimeout(comboDebounce);
+        const q = (e.target.value || '').trim();
+        comboDebounce = setTimeout(()=>{
+          if (!q) { showFullList(); return; }
+          showingFullList = false;
+          suggs = rankSymbols(q);
+          renderSuggestions(q);
+        }, 60);
+      });
+
+      symbolInput.addEventListener('focus', ()=>{
+        const q = (symbolInput.value || '').trim();
+        if (!q) showFullList();
+        else { showingFullList = false; suggs = rankSymbols(q); renderSuggestions(q); }
+      });
+
+      symbolInput.addEventListener('blur', ()=>{ setTimeout(closePanel, 120); });
+
+      document.addEventListener('mousedown', (e)=>{
+        if(!panel.contains(e.target) && !$('.search-group').contains(e.target)) closePanel();
+      });
+
+      function chooseSuggestionByElement(li){
+        const code = li?.dataset?.code;
+        if(!code) return;
+        symbolInput.value = code;
+        closePanel();
+        goToSymbol(toTVSymbol(code));
+      }
+
+      (function hardDisableAutofill(){
+        const i = document.getElementById('symbolInput');
+        const qForm = document.getElementById('qForm');
+        if (qForm) qForm.setAttribute('autocomplete','off');
+        if (i){
+          i.setAttribute('autocomplete','off');
+          i.setAttribute('autocorrect','off');
+          i.setAttribute('autocapitalize','none');
+          i.setAttribute('spellcheck','false');
+          i.setAttribute('name', 'sym_' + Math.random().toString(36).slice(2));
+        }
+      })();
+
+      const initialRaw = normalizeInputSymbol(getParam('tvwidgetsymbol')) || loadLocal('lastSymbol','CSELK:ASI');
+      const initialSymbol = isAllowed(initialRaw) ? initialRaw : 'CSELK:ASI';
+      const state = { symbol: initialSymbol };
+      document.title = `QuantView — ${initialSymbol}`;
+      renderWatchlist();
+      mountTickerTapeAuto();
+      renderMarketStatus();
+
+      // Market widgets mount on first visit to the Markets tab (keeps Home fast).
+      let _marketMounted = false;
+      function ensureMarketMounted(){
+        if (_marketMounted) return;
+        _marketMounted = true;
+        mountAllWidgets(state.symbol);
+        deferWidget('#market-overview', mountMarketOverview);
+      }
+
+      // Home tab: snapshot widget + watchlist preview + search.
+      let _homeMounted = false;
+      function mountHomeOverview(){
+        mountTVWidget('#home-overview','embed-widget-market-overview.js',{
+          colorTheme: themeForTV(), dateRange:'12M', showChart:true, locale:'en', width:'100%', height:380,
+          isTransparent:true, showSymbolLogo:true, gridLineColor:'rgba(42,46,57,0)',
+          tabs:[ { title:"CSE & FX", symbols:[
+              {s:"CSELK:ASI", d:"All Share Index"},
+              {s:"CSELK:S&PSL20", d:"S&P SL20"},
+              {s:"USDLKR", d:"USD/LKR"},
+              {s:"CSELK:JKH.N0000", d:"JKH"},
+              {s:"CSELK:COMB.N0000", d:"COMB"}
+          ]}]
+        });
+      }
+      function renderHomeWatchlist(){
+        const wrap = document.getElementById('homeWatchlist');
+        const empty = document.getElementById('homeWatchlistEmpty');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        const items = (typeof watchlist !== 'undefined' && Array.isArray(watchlist)) ? watchlist : [];
+        if (!items.length){ empty.style.display = 'block'; return; }
+        empty.style.display = 'none';
+        items.forEach(sym=>{
+          const b = document.createElement('button');
+          b.className = 'btn glass';
+          b.type = 'button';
+          b.textContent = sym.replace(/^CSELK:/, '').replace(/\.N0000$/, '');
+          b.title = sym;
+          b.addEventListener('click', ()=> goToSymbol(sym));
+          wrap.append(b);
+        });
+      }
+      function ensureHomeMounted(){
+        renderHomeWatchlist();
+        if (_homeMounted) return;
+        _homeMounted = true;
+        deferWidget('#home-overview', mountHomeOverview);
+      }
+
+      function showTab(which){ // 'home' | 'market' | 'compare'
+        const wraps = { home:'homeWrap', market:'marketWrap', compare:'compareWrap' };
+        Object.entries(wraps).forEach(([name, id])=>{
+          const el = document.getElementById(id);
+          if (el) el.style.display = (name === which) ? 'grid' : 'none';
+        });
+        if (which === 'home') ensureHomeMounted();
+        if (which === 'market') ensureMarketMounted();
+      }
+
+      document.getElementById('homeTabBtn')?.addEventListener('click', ()=> showTab('home'));
+      document.getElementById('site-logo')?.addEventListener('click', (e)=>{ e.preventDefault(); showTab('home'); });
+      document.querySelectorAll('.home-go').forEach(el=>{
+        const go = ()=>{
+          const tab = el.dataset.tab;
+          if (tab === 'compare'){ showTab('compare'); if (!CMP.mounted){ CMP.mounted = true; renderCompare(); } return; }
+          showTab(tab || 'market');
+        };
+        el.addEventListener('click', go);
+        el.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } });
+      });
+
+      document.getElementById('compareTabBtn')?.addEventListener('click', ()=>{
+        showTab('compare');
+        if (!CMP.mounted){ CMP.mounted = true; renderCompare(); }
+      });
+
+      /* ====================== Compare Tab ====================== */
+      const CMP = { symbols: [], mounted: false, MAX: 6 };
+
+      function cmpRenderChips(){
+        const wrap = document.getElementById('cmpChips');
+        wrap.innerHTML = '';
+        CMP.symbols.forEach(sym=>{
+          const chip = document.createElement('span');
+          chip.className = 'cmp-chip';
+          const label = document.createElement('span');
+          label.textContent = sym.replace(/^CSELK:/, '').replace(/\.N0000$/, '');
+          const x = document.createElement('button');
+          x.type = 'button'; x.textContent = '×'; x.title = 'Remove';
+          x.addEventListener('click', ()=>{ cmpRemove(sym); });
+          chip.append(label, x);
+          wrap.append(chip);
+        });
+      }
+
+      function renderCompare(){
+        cmpRenderChips();
+        const holder = document.getElementById('cmp-overview');
+        const empty = document.getElementById('cmpEmpty');
+        if (!CMP.symbols.length){
+          holder.querySelectorAll('.tradingview-widget-container__widget').forEach(w=> w.innerHTML='');
+          holder.querySelectorAll('script').forEach(s=> s.remove());
+          empty.style.display = 'block';
+          return;
+        }
+        empty.style.display = 'none';
+        const [first, ...rest] = CMP.symbols;
+        // TradingView's compare feature rebases added symbols to % — exactly the overlay we want.
+        mountTVWidget('#cmp-overview', 'embed-widget-advanced-chart.js', {
+          width:'100%', height:520, symbol:first, interval:'D', timezone:TZ,
+          theme: themeForTV(), style:'2', locale:'en', hide_side_toolbar:true,
+          allow_symbol_change:false, calendar:false,
+          compareSymbols: rest.map(s=>({ symbol:s, position:'SameScale' })),
+          support_host:'https://www.tradingview.com'
+        });
+      }
+
+      function cmpAdd(code){
+        const tv = toTVSymbol(code);
+        if (!tv || !isAllowed(tv)) return;
+        if (CMP.symbols.includes(tv)) return;
+        if (CMP.symbols.length >= CMP.MAX){ alert(`Up to ${CMP.MAX} symbols.`); return; }
+        CMP.symbols.push(tv);
+        renderCompare();
+      }
+      function cmpRemove(sym){
+        const i = CMP.symbols.indexOf(sym);
+        if (i > -1){ CMP.symbols.splice(i,1); renderCompare(); }
+      }
+
+      (function wireCompareInput(){
+        const input = document.getElementById('cmpInput');
+        const addBtn = document.getElementById('cmpAddBtn');
+        const clearBtn = document.getElementById('cmpClearBtn');
+        const cpanel = document.getElementById('cmpComboPanel');
+        const clist = document.getElementById('cmpComboList');
+        if (!input) return;
+
+        const commit = ()=>{
+          const v = (input.value||'').trim();
+          if (!v) return;
+          cmpAdd(v.toUpperCase());
+          input.value = ''; cpanel.classList.remove('open');
+        };
+        addBtn.addEventListener('click', commit);
+        clearBtn.addEventListener('click', ()=>{ CMP.symbols = []; renderCompare(); });
+
+        function renderCmpSuggestions(q){
+          const hits = rankSymbols(q);
+          clist.innerHTML = '';
+          if (!hits.length){ clist.innerHTML = `<li class="combo-empty">No matches.</li>`; cpanel.classList.add('open'); return; }
+          hits.forEach(s=>{
+            const li = document.createElement('li');
+            li.className = 'combo-item';
+            li.innerHTML = `<div class="combo-left"><span class="combo-code">${markMatch(s.code,q)}</span><span class="combo-name">${markMatch(s.name||'',q)}</span></div><div class="combo-pill">CSE</div>`;
+            li.addEventListener('mousedown', (e)=>{ e.preventDefault(); cmpAdd(s.code); input.value=''; cpanel.classList.remove('open'); });
+            clist.append(li);
+          });
+          cpanel.classList.add('open');
+        }
+
+        let deb;
+        input.addEventListener('input', ()=>{
+          clearTimeout(deb);
+          const q = (input.value||'').trim();
+          deb = setTimeout(()=>{ if (q) renderCmpSuggestions(q); else cpanel.classList.remove('open'); }, 60);
+        });
+        input.addEventListener('keydown', (e)=>{ if (e.key === 'Enter'){ e.preventDefault(); commit(); } });
+        input.addEventListener('blur', ()=> setTimeout(()=> cpanel.classList.remove('open'), 120));
+      })();
+
+      (function wireHomeSearch(){
+        const input = document.getElementById('homeSearch');
+        const goBtn = document.getElementById('homeGoBtn');
+        const hpanel = document.getElementById('homeComboPanel');
+        const hlist = document.getElementById('homeComboList');
+        if (!input) return;
+
+        const commit = ()=>{
+          const v = (input.value||'').trim();
+          if (!v) return;
+          goToSymbol(toTVSymbol(v.toUpperCase()));
+        };
+        goBtn.addEventListener('click', commit);
+        input.addEventListener('keydown', (e)=>{ if (e.key === 'Enter'){ e.preventDefault(); commit(); } });
+
+        function suggest(q){
+          const hits = rankSymbols(q);
+          hlist.innerHTML = '';
+          if (!hits.length){ hlist.innerHTML = `<li class="combo-empty">No matches.</li>`; hpanel.classList.add('open'); return; }
+          hits.forEach(s=>{
+            const li = document.createElement('li');
+            li.className = 'combo-item';
+            li.innerHTML = `<div class="combo-left"><span class="combo-code">${markMatch(s.code,q)}</span><span class="combo-name">${markMatch(s.name||'',q)}</span></div><div class="combo-pill">CSE</div>`;
+            li.addEventListener('mousedown', (e)=>{ e.preventDefault(); goToSymbol(toTVSymbol(s.code)); });
+            hlist.append(li);
+          });
+          hpanel.classList.add('open');
+        }
+        let deb;
+        input.addEventListener('input', ()=>{
+          clearTimeout(deb);
+          const q = (input.value||'').trim();
+          deb = setTimeout(()=>{ if (q) suggest(q); else hpanel.classList.remove('open'); }, 60);
+        });
+        input.addEventListener('blur', ()=> setTimeout(()=> hpanel.classList.remove('open'), 120));
+      })();
+
+
+      // Decide the landing tab. Shared symbol links open Markets; ?tab=… honours a section; otherwise Home.
+      (function chooseInitialTab(){
+        const params = new URLSearchParams(location.search);
+        if (params.get('tvwidgetsymbol')){ showTab('market'); return; }
+        const tab = params.get('tab');
+        if (tab === 'compare'){ showTab('compare'); CMP.mounted = true; renderCompare(); return; }
+        if (tab === 'market'){ showTab('market'); return; }
+        showTab('home');
+      })();
+    </script>
+  </body>
+</html>

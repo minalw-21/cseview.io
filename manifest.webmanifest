@@ -1,0 +1,17 @@
+{
+  "name": "QuantView — CSE Markets & Compare",
+  "short_name": "QuantView",
+  "description": "Colombo Stock Exchange charts and side-by-side symbol comparison.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e11",
+  "theme_color": "#2962ff",
+  "categories": ["finance", "business"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
